@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     FILE_MAX_SIZE: int = 10  # بالـ Megabytes مثلاً
     FILE_DEFAULT_CHUNK_SIZE: int = 512
 
+    MONGO_URI: str
+    MONGO_DB_NAME: str
+
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,
         env_file_encoding="utf-8",
