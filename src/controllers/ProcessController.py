@@ -4,7 +4,7 @@ import os
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from models.enums.ProcessingEnum import ProcessingEnum
+from models import ProcessingEnum
 
 class ProcessController(BaseController):
 
@@ -66,3 +66,4 @@ class ProcessController(BaseController):
 
 
     
+
