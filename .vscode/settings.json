@@ -4,6 +4,8 @@
   "python.analysis.extraPaths": [
     "./src",
     "./src/models",
-    "."
-  ]
+    "./src/stores",
+    "./src/stores/providers"
+  ],
+  "python.languageServer": "Pylance"
 }
