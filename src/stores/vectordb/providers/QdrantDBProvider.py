@@ -3,11 +3,11 @@ from ..VectorDBInterface import VectorDBInterface
 from ..VectorDBEnums import DistanceMethodEnums
 import logging
 from typing import List
+from models.db_schemes import RetrievedDocument
 
 class QdrantDBProvider(VectorDBInterface):
 
     def __init__(self, db_path: str, distance_method: str):
-
         self.client = None
         self.db_path = db_path
         self.distance_method = None
@@ -20,7 +20,16 @@ class QdrantDBProvider(VectorDBInterface):
         self.logger = logging.getLogger(__name__)
 
     def connect(self):
-        self.client = QdrantClient(path=self.db_path)
+        if self.db_path and self.db_path.startswith("http"):
+            self.client = QdrantClient(url=self.db_path, check_compatibility=False)
+        elif self.db_path and ":" in self.db_path and not self.db_path.startswith("/"):
+            self.client = QdrantClient(url=f"http://{self.db_path}", check_compatibility=False)
+        else:
+            try:
+                self.client = QdrantClient(url="http://localhost:6333", check_compatibility=False)
+                self.client.get_collections()
+            except Exception:
+                self.client = QdrantClient(path=self.db_path, check_compatibility=False)
 
     def disconnect(self):
         self.client = None
@@ -52,7 +61,6 @@ class QdrantDBProvider(VectorDBInterface):
                     distance=self.distance_method
                 )
             )
-
             return True
         
         return False
@@ -66,19 +74,18 @@ class QdrantDBProvider(VectorDBInterface):
             return False
         
         try:
-            _ = self.client.upload_records(
+            point = models.PointStruct(
+                id=record_id if record_id is not None else 0,
+                vector=vector,
+                payload={"text": text, "metadata": metadata}
+            )
+            self.client.upsert(
                 collection_name=collection_name,
-                records=[
-                    models.Record(
-                        vector=vector,
-                        payload={
-                            "text": text, "metadata": metadata
-                        }
-                    )
-                ]
+                points=[point],
+                wait=True
             )
         except Exception as e:
-            self.logger.error(f"Error while inserting batch: {e}")
+            self.logger.error(f"Error while inserting record: {e}")
             return False
 
         return True
@@ -91,7 +98,7 @@ class QdrantDBProvider(VectorDBInterface):
             metadata = [None] * len(texts)
 
         if record_ids is None:
-            record_ids = [None] * len(texts)
+            record_ids = list(range(0, len(texts)))
 
         for i in range(0, len(texts), batch_size):
             batch_end = i + batch_size
@@ -99,22 +106,25 @@ class QdrantDBProvider(VectorDBInterface):
             batch_texts = texts[i:batch_end]
             batch_vectors = vectors[i:batch_end]
             batch_metadata = metadata[i:batch_end]
+            batch_record_ids = record_ids[i:batch_end]
 
-            batch_records = [
-                models.Record(
+            points = [
+                models.PointStruct(
+                    id=batch_record_ids[x],
                     vector=batch_vectors[x],
                     payload={
-                        "text": batch_texts[x], "metadata": batch_metadata[x]
+                        "text": batch_texts[x], 
+                        "metadata": batch_metadata[x]
                     }
                 )
-
                 for x in range(len(batch_texts))
             ]
 
             try:
-                _ = self.client.upload_records(
+                self.client.upsert(
                     collection_name=collection_name,
-                    records=batch_records,
+                    points=points,
+                    wait=True
                 )
             except Exception as e:
                 self.logger.error(f"Error while inserting batch: {e}")
@@ -123,9 +133,31 @@ class QdrantDBProvider(VectorDBInterface):
         return True
         
     def search_by_vector(self, collection_name: str, vector: list, limit: int = 5):
+        try:
+            response = self.client.query_points(
+                collection_name=collection_name,
+                query=vector,
+                limit=limit
+            )
+            results = response.points
 
-        return self.client.search(
-            collection_name=collection_name,
-            query_vector=vector,
-            limit=limit
-        )
+            if not results:
+                return []
+
+            retrieved_docs = []
+            for result in results:
+                payload = result.payload or {}
+                text_content = payload.get("text", "")
+                
+                retrieved_docs.append(
+                    RetrievedDocument(
+                        score=result.score,
+                        text=text_content
+                    )
+                )
+
+            return retrieved_docs
+
+        except Exception as e:
+            self.logger.error(f"Error while searching vector DB: {e}")
+            return None

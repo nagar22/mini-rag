@@ -59,8 +59,8 @@ $ sudo docker compose up -d
 
 ## Run the FastAPI server
 
-```bash
-$ PYTHONPATH=src uvicorn src.main:app --reload
+```bashPYTHONPATH=src uvicorn src.main:app --reload
+$ 
 ```
 
 ## POSTMAN Collection
